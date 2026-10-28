@@ -79,6 +79,7 @@ header.top{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px}
 .fields label.wide{grid-column:1/-1}
 input[type=text],input[type=number],select,textarea{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:5px 7px;min-width:0;width:100%}
 input.num{font-family:var(--f-mono);font-size:13px;text-align:right}
+input:disabled{background:var(--surface-2);color:var(--ink-3);cursor:not-allowed;border-style:dashed}
 input.bad{border-color:var(--out);background:var(--out-soft)}
 textarea{font-family:var(--f-mono);font-size:12px;resize:vertical}
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
@@ -193,7 +194,7 @@ document.getElementById('anLogo').src=AN_LOGO;document.getElementById('mtLogo').
      A : arc      {t:'A',A,B,C,r,rot(+1 gauche / -1 droite),a0,da,len,s0}
      S : spirale  {t:'S',A,B,len,s0,P,h,th0,th1,k0,k1,rot}  (clothoïde, polyligne dense)
    ============================================================ */
-const APP_VER='v1.1 (2026-10-28)';
+const APP_VER='v1.1.1 (2026-10-28)';
 function nowLocal(sec){ const d=new Date(), z=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())} ${z(d.getHours())}:${z(d.getMinutes())}`+(sec?':'+z(d.getSeconds()):''); }
 const D2R=Math.PI/180;
 const nrm=a=>{ a%=2*Math.PI; if(a<=-Math.PI)a+=2*Math.PI; if(a>Math.PI)a-=2*Math.PI; return a; };
@@ -842,9 +843,9 @@ const BIGPROF=300;
 function paneProf(){
   const ax=curAx(); const piv=ax.profil.piv||[]; const big=piv.length>BIGPROF;
   return `<div class="sect">${axSelect()}<h4>PIV du profil <span class="sp"></span><button class="btn small" data-act="pvpaste">Coller un tableau…</button></h4>
-  <p class="help">PM tels qu'affichés (équations comprises). Longueur de courbe verticale parabolique symétrique (vide : aucune courbe). Les pentes sont calculées.</p>
+  <p class="help">PM tels qu'affichés (équations comprises). Longueur de courbe verticale parabolique symétrique (vide : aucune courbe), sur les PIV seulement : la première et la dernière ligne sont les extrémités du profil. Les pentes sont calculées.</p>
   ${big?`<p class="help"><b>${piv.length} PIV</b> : profil échantillonné importé, non éditable ici. <button class="btn small" data-act="pvclr">Vider le profil</button></p>`:
-  `<div class="tablewrap"><table class="ed"><thead><tr><th>#</th><th class="num">PM</th><th class="num">Z</th><th class="num">L courbe</th><th></th></tr></thead><tbody>${piv.map((p,i)=>`<tr><td class="mono">${i===0?'Début':i===piv.length-1?'Fin':'PIV '+i}</td><td><input type="text" class="num w" data-v="pm" data-i="${i}" value="${esc(p.pm)}" inputmode="decimal"></td><td><input type="text" class="num" data-v="z" data-i="${i}" value="${esc(p.z)}" inputmode="decimal"></td><td><input type="text" class="num s" data-v="L" data-i="${i}" value="${esc(p.L)}" inputmode="decimal" ${i===0||i===piv.length-1?'disabled':''}></td><td><button class="ib" data-act="pvins" data-i="${i}" title="Insérer avant">＋</button><button class="ib" data-act="pvdel" data-i="${i}" title="Supprimer">✕</button></td></tr>`).join('')}</tbody></table></div>
+  `<div class="tablewrap"><table class="ed"><thead><tr><th>#</th><th class="num">PM</th><th class="num">Z</th><th class="num">L courbe</th><th></th></tr></thead><tbody>${piv.map((p,i)=>`<tr><td class="mono">${i===0?'Début':i===piv.length-1?'Fin':'PIV '+i}</td><td><input type="text" class="num w" data-v="pm" data-i="${i}" value="${esc(p.pm)}" inputmode="decimal"></td><td><input type="text" class="num" data-v="z" data-i="${i}" value="${esc(p.z)}" inputmode="decimal"></td><td><input type="text" class="num s" data-v="L" data-i="${i}" value="${esc(p.L)}" inputmode="decimal" ${i===0||i===piv.length-1?'disabled placeholder="—" title="Pas de courbe au début ni à la fin du profil : ajoutez un point de fin après le dernier PIV"':'placeholder="aucune"'}></td><td><button class="ib" data-act="pvins" data-i="${i}" title="Insérer avant">＋</button><button class="ib" data-act="pvdel" data-i="${i}" title="Supprimer">✕</button></td></tr>`).join('')}</tbody></table></div>
   <div class="row"><button class="btn small" data-act="pvadd">+ PIV</button>${piv.length?'<button class="btn small" data-act="pvclr">Vider</button>':''}<span style="margin-left:auto"></span><button class="btn small" data-act="pvconv" title="Convertit les PM lus sur un plan chaîné par la corde">PM du plan → PM vrai…</button></div>`}
   </div><div id="res"></div>`;
 }
@@ -971,7 +972,7 @@ $('#pane').addEventListener('input',e=>{
   if(d.r){ const row=ax.saisie.el.rows[+d.i]; row[d.r]=t.value; if(d.r==='type'||d.r==='mode'){ touch(); renderPane(); return; } touch(); soon(); return; }
   if(d.pi){ ax.saisie.pi.rows[+d.i][d.pi]=t.value; touch(); soon(); return; }
   if(d.q){ ax.equations[+d.i][d.q]=t.value; touch(); soon(); return; }
-  if(d.v){ ax.profil.piv[+d.i][d.v]=t.value; touch(); soon(); return; }
+  if(d.v){ ax.profil.piv[+d.i][d.v]=t.value; if(d.v==='pm') ST.prof={x0:null,x1:null}; touch(); soon(); return; }
   if(d.s){ ST.stake[d.s]=t.type==='checkbox'?t.checked:t.value; soon(); return; }
   if(d.act==='axname'){ ST.prj.axes[+d.i].nom=t.value; ST.dirty=true; autosave(); drawAll(); return; }
 });
@@ -1004,9 +1005,9 @@ $('#pane').addEventListener('click',async e=>{
     case 'eqadd': ax.equations.push({arr:'',av:''}); touch(); renderPane(); return;
     case 'eqdel': ax.equations.splice(i,1); touch(); renderPane(); return;
     case 'eqclr': ax.equations=[]; touch(); renderPane(); return;
-    case 'pvadd': V.push({pm:'',z:'',L:''}); touch(); renderPane(); return;
-    case 'pvins': V.splice(i,0,{pm:'',z:'',L:''}); touch(); renderPane(); return;
-    case 'pvdel': V.splice(i,1); touch(); renderPane(); return;
+    case 'pvadd': V.push({pm:'',z:'',L:''}); ST.prof={x0:null,x1:null}; touch(); renderPane(); return;
+    case 'pvins': V.splice(i,0,{pm:'',z:'',L:''}); ST.prof={x0:null,x1:null}; touch(); renderPane(); return;
+    case 'pvdel': V.splice(i,1); ST.prof={x0:null,x1:null}; touch(); renderPane(); return;
     case 'pvclr': if(confirm('Vider le profil de cet axe ?')){ ax.profil.piv=[]; touch(); renderPane(); } return;
     case 'pvpaste': pasteDlg('Coller des PIV','Une ligne par PIV : PM Z [L courbe]. Le PM peut s\'écrire 1+043.586 ou 1043.586. Séparateurs : tabulation, point-virgule ou espace.',txt=>{ const rows=parseTable(txt).map(c=>({pm:c[0]||'',z:c[1]||'',L:c[2]||''})).filter(r=>isFinite(parsePM(r.pm))); if(rows.length<2){ toast('Il faut au moins deux PIV'); return false; } ax.profil.piv=rows; touch(); renderPane(); ST.prof={x0:null,x1:null}; }); return;
     case 'pvconv': { const g=geoOf(ax); if(!g.els.length||!V.length) return; if(!confirm('Convertir les PM de tous les PIV, lus sur un plan chaîné par la corde, vers le vrai PM ? Les longueurs de courbe sont gardées.')) return; let mx=0; V.forEach(p=>{ const x=parsePM(p.pm); if(isFinite(x)){ const v=planToTrue(ax,g,x); mx=Math.max(mx,Math.abs(v-x)); p.pm=v.toFixed(3); } }); touch(); renderPane(); toast('PM convertis (écart maximal '+mx.toFixed(3)+' m)'); return; }
