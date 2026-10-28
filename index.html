@@ -85,6 +85,7 @@ textarea{font-family:var(--f-mono);font-size:12px;resize:vertical}
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--surface)}
 .seg button{border:0;background:transparent;padding:6px 11px;cursor:pointer;font-weight:600;font-family:var(--f-display);font-size:14.5px}
+.seg button[disabled]{opacity:.35;cursor:default}
 .seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
 .tablewrap{overflow:auto;border:1px solid var(--line);border-radius:6px}
 table{border-collapse:collapse;width:100%;font-size:12.5px}
@@ -143,6 +144,7 @@ table.ed input.num.s{width:82px}
       <h1>Projet routier</h1>
       <span>Axe, profil, rapports et exports · <span id="verApp" title="Version de l'application"></span><span id="mStat"></span></span>
     </div>
+    <span class="seg" role="group" aria-label="Annuler et rétablir"><button id="bUndo" disabled aria-label="Annuler">↶</button><button id="bRedo" disabled aria-label="Rétablir">↷</button></span>
     <button class="btn" id="bMandat" title="Enregistrer et ouvrir les projets directement dans le dossier du contrat : 04_PRODUCTION\04_ROUTES (Chrome ou Edge)">Mandat…</button>
     <button class="btn" id="bNew" title="Commencer un nouveau projet vide">Nouveau</button>
     <label class="btn" title="Ouvrir un projet routier enregistré (projet_NOM.json)"><input type="file" id="fOpen" accept=".json" class="sr">Ouvrir…</label>
@@ -194,7 +196,7 @@ document.getElementById('anLogo').src=AN_LOGO;document.getElementById('mtLogo').
      A : arc      {t:'A',A,B,C,r,rot(+1 gauche / -1 droite),a0,da,len,s0}
      S : spirale  {t:'S',A,B,len,s0,P,h,th0,th1,k0,k1,rot}  (clothoïde, polyligne dense)
    ============================================================ */
-const APP_VER='v1.1.1 (2026-10-28)';
+const APP_VER='v1.2 (2026-10-28)';
 function nowLocal(sec){ const d=new Date(), z=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())} ${z(d.getHours())}:${z(d.getMinutes())}`+(sec?':'+z(d.getSeconds()):''); }
 const D2R=Math.PI/180;
 const nrm=a=>{ a%=2*Math.PI; if(a<=-Math.PI)a+=2*Math.PI; if(a>Math.PI)a-=2*Math.PI; return a; };
@@ -966,6 +968,7 @@ let rT=null;
 function soon(){ clearTimeout(rT); rT=setTimeout(refreshResults,120); }
 $('#pane').addEventListener('input',e=>{
   const t=e.target, d=t.dataset, ax=curAx();
+  { const f=d.p||d.a||d.e||d.r||d.pi||d.q||d.v||(d.act==='axname'?'axname':''); if(f&&!d.s) snap('saisie',f+':'+(d.i??'')+':'+ST.cur); }
   if(d.p){ ST.prj[d.p]=t.value; ST.dirty=true; autosave(); if(d.p==='nom'||d.p==='contrat') return; return; }
   if(d.a){ if(d.a==='pmDepart'){ const v=parsePM(t.value); t.classList.toggle('bad',!isFinite(v)); if(!isFinite(v)) return; ax.pmDepart=v; } else ax.nom=t.value; touch(); soon(); return; }
   if(d.e){ ax.saisie.el[d.e]=t.value; touch(); soon(); return; }
@@ -983,6 +986,7 @@ $('#pane').addEventListener('change',e=>{ const t=e.target, d=t.dataset;
 });
 $('#pane').addEventListener('click',async e=>{
   const b=e.target.closest('[data-act]'); if(!b||b.tagName==='SELECT'||b.tagName==='INPUT') return; const a=b.dataset.act, i=+b.dataset.i, ax=curAx(), sz=ax.saisie;
+  if(UNDO_LBL[a]) snap(UNDO_LBL[a]);
   const R=sz.el.rows, PR=sz.pi.rows, V=ax.profil.piv;
   switch(a){
     case 'axnew': ST.prj.axes.push(newAxe('Axe '+(ST.prj.axes.length+1))); ST.cur=ST.prj.axes.length-1; touch(); ST.tab='axe'; selTab(); fitPlan(); return;
@@ -994,11 +998,11 @@ $('#pane').addEventListener('click',async e=>{
     case 'eup': if(i>0){ [R[i-1],R[i]]=[R[i],R[i-1]]; touch(); renderPane(); } return;
     case 'edn': if(i<R.length-1){ [R[i+1],R[i]]=[R[i],R[i+1]]; touch(); renderPane(); } return;
     case 'eins': R.splice(i,0,{type:'droite',L:'',az:''}); touch(); renderPane(); return;
-    case 'edel': R.splice(i,1); touch(); renderPane(); return;
+    case 'edel': R.splice(i,1); touch(); renderPane(); toast('Élément supprimé · Ctrl+Z ou ↶ pour le remettre',4000); return;
     case 'piadd': PR.splice(Math.max(1,PR.length-1),0,{E:'',N:'',R:'',Ls1:'',Ls2:''}); touch(); renderPane(); return;
     case 'piins': PR.splice(Math.max(i,0),0,{E:'',N:'',R:'',Ls1:'',Ls2:''}); touch(); renderPane(); return;
-    case 'pidel': if(PR.length<=2){ PR[i]={E:'',N:''}; } else PR.splice(i,1); touch(); renderPane(); return;
-    case 'pipaste': pasteDlg('Coller des sommets','Une ligne par sommet : E N [Rayon] [Spir. entrée] [Spir. sortie]. Séparateurs : tabulation, point-virgule ou espace. Première et dernière lignes : début et fin.',txt=>{ const rows=parseTable(txt).map(c=>({E:c[0]||'',N:c[1]||'',R:c[2]||'',Ls1:c[3]||'',Ls2:c[4]||''})); if(rows.length<2){ toast('Il faut au moins deux lignes'); return false; } sz.pi.rows=rows; sz.mode='pi'; touch(); renderPane(); fitPlan(); }); return;
+    case 'pidel': if(PR.length<=2){ PR[i]={E:'',N:''}; } else PR.splice(i,1); touch(); renderPane(); toast('Sommet supprimé · Ctrl+Z ou ↶ pour le remettre',4000); return;
+    case 'pipaste': pasteDlg('Coller des sommets','Une ligne par sommet : E N [Rayon] [Spir. entrée] [Spir. sortie]. Séparateurs : tabulation, point-virgule ou espace. Première et dernière lignes : début et fin.',txt=>{ snap('collage de sommets'); const rows=parseTable(txt).map(c=>({E:c[0]||'',N:c[1]||'',R:c[2]||'',Ls1:c[3]||'',Ls2:c[4]||''})); if(rows.length<2){ toast('Il faut au moins deux lignes'); return false; } sz.pi.rows=rows; sz.mode='pi'; touch(); renderPane(); fitPlan(); }); return;
     case 'topi': convertTo('pi'); return;
     case 'toel': convertTo('elements'); return;
     case 'reverse': { const g=geoOf(ax); if(!g.els.length) return; if(!confirm('Inverser le sens du chaînage ? La géométrie devient fixe et le profil est vidé.')) return; const els=reverseEls(g.els); ax.elements=els.map(serEl); sz.mode='import'; sz.source=(sz.source||'Saisie')+' (sens inversé)'; ax.equations=[]; ax.profil.piv=[]; touch(); renderPane(); return; }
@@ -1007,9 +1011,9 @@ $('#pane').addEventListener('click',async e=>{
     case 'eqclr': ax.equations=[]; touch(); renderPane(); return;
     case 'pvadd': V.push({pm:'',z:'',L:''}); ST.prof={x0:null,x1:null}; touch(); renderPane(); return;
     case 'pvins': V.splice(i,0,{pm:'',z:'',L:''}); ST.prof={x0:null,x1:null}; touch(); renderPane(); return;
-    case 'pvdel': V.splice(i,1); ST.prof={x0:null,x1:null}; touch(); renderPane(); return;
+    case 'pvdel': { const x=V[i]; V.splice(i,1); ST.prof={x0:null,x1:null}; touch(); renderPane(); toast(`PIV ${x&&x.pm?x.pm:''} supprimé · Ctrl+Z ou ↶ pour le remettre`,4000); return; }
     case 'pvclr': if(confirm('Vider le profil de cet axe ?')){ ax.profil.piv=[]; touch(); renderPane(); } return;
-    case 'pvpaste': pasteDlg('Coller des PIV','Une ligne par PIV : PM Z [L courbe]. Le PM peut s\'écrire 1+043.586 ou 1043.586. Séparateurs : tabulation, point-virgule ou espace.',txt=>{ const rows=parseTable(txt).map(c=>({pm:c[0]||'',z:c[1]||'',L:c[2]||''})).filter(r=>isFinite(parsePM(r.pm))); if(rows.length<2){ toast('Il faut au moins deux PIV'); return false; } ax.profil.piv=rows; touch(); renderPane(); ST.prof={x0:null,x1:null}; }); return;
+    case 'pvpaste': pasteDlg('Coller des PIV','Une ligne par PIV : PM Z [L courbe]. Le PM peut s\'écrire 1+043.586 ou 1043.586. Séparateurs : tabulation, point-virgule ou espace.',txt=>{ snap('collage de PIV'); const rows=parseTable(txt).map(c=>({pm:c[0]||'',z:c[1]||'',L:c[2]||''})).filter(r=>isFinite(parsePM(r.pm))); if(rows.length<2){ toast('Il faut au moins deux PIV'); return false; } ax.profil.piv=rows; touch(); renderPane(); ST.prof={x0:null,x1:null}; }); return;
     case 'pvconv': { const g=geoOf(ax); if(!g.els.length||!V.length) return; if(!confirm('Convertir les PM de tous les PIV, lus sur un plan chaîné par la corde, vers le vrai PM ? Les longueurs de courbe sont gardées.')) return; let mx=0; V.forEach(p=>{ const x=parsePM(p.pm); if(isFinite(x)){ const v=planToTrue(ax,g,x); mx=Math.max(mx,Math.abs(v-x)); p.pm=v.toFixed(3); } }); touch(); renderPane(); toast('PM convertis (écart maximal '+mx.toFixed(3)+' m)'); return; }
     case 'calc1': calcTool(1); return; case 'calc2': calcTool(2); return; case 'calc3': calcTool(3); return; case 'calc4': calcTool(4); return;
     case 'rep': { const g=geoOf(ax); if(!g.els.length){ toast('Aucun axe calculé'); return; } const html=reportHTML(); openModal('Rapport d\'éléments','<iframe id="repFrame" title="Rapport"></iframe>',[{label:'Imprimer / PDF',primary:true,fn:()=>$('#repFrame').contentWindow.print()},{label:'Télécharger (.html)',fn:()=>dlReport()}]); $('#repFrame').srcdoc=html; return; }
@@ -1037,6 +1041,28 @@ function pasteDlg(title,help,fn){
   setTimeout(()=>$('#pasteTa').focus(),30);
 }
 
+
+/* ============================================================
+   ANNULER / RÉTABLIR (100 étapes, en mémoire)
+   ============================================================ */
+const UNDO={stack:[],redo:[],lastT:0,lastK:''};
+const stateStr=()=>JSON.stringify({prj:ST.prj,cur:ST.cur},clean);
+function snap(label,key){ const now=Date.now(); if(key&&key===UNDO.lastK&&now-UNDO.lastT<2000){ UNDO.lastT=now; return; }
+  UNDO.stack.push({s:stateStr(),label}); if(UNDO.stack.length>100) UNDO.stack.shift(); UNDO.redo=[]; UNDO.lastT=now; UNDO.lastK=key||''; updUndo(); }
+function updUndo(){ const u=$('#bUndo'), r=$('#bRedo'); if(!u) return; u.disabled=!UNDO.stack.length; r.disabled=!UNDO.redo.length;
+  u.title=UNDO.stack.length?'Annuler : '+UNDO.stack[UNDO.stack.length-1].label+' (Ctrl+Z)':'Rien à annuler'; r.title=UNDO.redo.length?'Rétablir : '+UNDO.redo[UNDO.redo.length-1].label+' (Ctrl+Y)':'Rien à rétablir'; }
+function undoRedo(back){
+  const from=back?UNDO.stack:UNDO.redo, to=back?UNDO.redo:UNDO.stack; const cur=stateStr(); let x=from.pop();
+  while(x&&x.s===cur) x=from.pop(); if(!x){ updUndo(); toast(back?'Rien à annuler':'Rien à rétablir'); return; }
+  to.push({s:cur,label:x.label}); const o=JSON.parse(x.s); loadProjectSilent(o.prj); ST.cur=Math.min(o.cur||0,ST.prj.axes.length-1);
+  ST.dirty=true; ST.prof={x0:null,x1:null}; UNDO.lastK=''; ST.prj.axes.forEach(a=>{ a._geo=null; }); autosave(); renderPane(); renderMStat(); drawAll(); updUndo();
+  toast((back?'Annulé : ':'Rétabli : ')+x.label);
+}
+$('#bUndo').onclick=()=>undoRedo(true); $('#bRedo').onclick=()=>undoRedo(false);
+document.addEventListener('keydown',e=>{ if(!(e.ctrlKey||e.metaKey)||e.altKey) return; const k=e.key.toLowerCase(); const t=document.activeElement; const txt=t&&(t.tagName==='TEXTAREA'||(t.tagName==='INPUT'&&!['checkbox','radio','button'].includes(t.type)));
+  if(txt||!$('#modal').hidden) return; if(k==='z'&&!e.shiftKey){ e.preventDefault(); undoRedo(true); } else if(k==='y'||(k==='z'&&e.shiftKey)){ e.preventDefault(); undoRedo(false); } });
+const UNDO_LBL={axnew:'nouvel axe',axdup:'axe dupliqué',axdel:'axe supprimé',mode:'changement de saisie',eadd:'élément ajouté',eup:'élément déplacé',edn:'élément déplacé',eins:'élément inséré',edel:'élément supprimé',piadd:'sommet ajouté',piins:'sommet inséré',pidel:'sommet supprimé',topi:'conversion en PI',toel:'conversion en éléments',reverse:'sens inversé',eqadd:'équation ajoutée',eqdel:'équation supprimée',eqclr:'équations supprimées',pvadd:'PIV ajouté',pvins:'PIV inséré',pvdel:'PIV supprimé',pvclr:'profil vidé',pvconv:'conversion des PM'};
+
 /* ============================================================
    FICHIERS : ouvrir, enregistrer, importer
    ============================================================ */
@@ -1058,6 +1084,7 @@ async function saveProject(){
   else { p.version=old.version; p.date=old.date; p.historique.length=old.n; if(r!=='fail') toast('Enregistrement annulé'); }
 }
 function loadProject(j,name){
+  snap('ouverture d\'un projet');
   if(!j||j.format!=='projet-routier') throw new Error('ce n\'est pas un projet routier');
   if((j.formatVersion||1)>1) toast('Projet créé par une version plus récente du module : certaines données peuvent être ignorées',5000);
   const p=Object.assign(newProject(),j); p.axes=(j.axes||[]).map(a=>{ const n=Object.assign(newAxe(),a); n.saisie=Object.assign(newAxe().saisie,a.saisie||{}); if(!a.saisie) n.saisie.mode='import'; n.saisie.el=Object.assign({E:'',N:'',az:'',rows:[]},n.saisie.el||{}); n.saisie.pi=Object.assign({rows:[]},n.saisie.pi||{}); n.profil=Object.assign({nom:'',piv:[]},a.profil||{}); n.equations=a.equations||[]; return n; });
@@ -1069,9 +1096,10 @@ function loadProject(j,name){
 $('#fOpen').addEventListener('change',async e=>{ const f=e.target.files[0]; e.target.value=''; if(!f) return; try{ loadProject(JSON.parse(await readFile(f)),f.name); }catch(err){ toast('Fichier illisible : '+err.message,4000); } });
 $('#fImp').addEventListener('change',async e=>{ const fs=[...e.target.files]; e.target.value=''; for(const f of fs) await importFile(f); });
 $('#bSave').onclick=saveProject;
-$('#bNew').onclick=()=>{ if(ST.dirty&&!confirm('Le projet courant a des modifications non enregistrées. Commencer un nouveau projet ?')) return; ST.prj=newProject(); ST.cur=0; ST.dirty=false; M.cdir=M.pdir=null; renderMStat(); autosave(); ST.tab='proj'; selTab(); fitPlan(); };
+$('#bNew').onclick=()=>{ if(ST.dirty&&!confirm('Le projet courant a des modifications non enregistrées. Commencer un nouveau projet ?')) return; snap('nouveau projet'); ST.prj=newProject(); ST.cur=0; ST.dirty=false; M.cdir=M.pdir=null; renderMStat(); autosave(); ST.tab='proj'; selTab(); fitPlan(); };
 function isBlank(ax){ return !ax.elements.length && !(ax.profil.piv||[]).length && !ax.saisie.el.rows.length; }
 function addAxes(list,source,sys){
+  snap('import de '+source);
   const W=[]; let first=null;
   for(const a of list){
     const ax=newAxe(a.nom); ax.pmDepart=a.pmDepart; ax.elements=a.els.map(serEl); ax.saisie.mode='import'; ax.saisie.source=source; ax.equations=(a.eq||[]).map(q=>({arr:f3(q.arr,5),av:f3(q.av,5)})); if(a.piv) ax.profil={nom:'',piv:a.piv};
@@ -1244,7 +1272,7 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',drawAll);
 function initApp(){
   let ok=false; try{ const s=JSON.parse(localStorage.getItem(LSKEY)||'null'); if(s&&s.prj&&s.prj.format==='projet-routier'){ loadProjectSilent(s.prj); ST.cur=Math.min(s.cur||0,ST.prj.axes.length-1); ST.dirty=!!s.dirty; ok=true; } }catch(_){}
   if(!ok) ST.prj=newProject();
-  renderPane(); renderMStat(); setTimeout(fitPlan,50);
+  renderPane(); renderMStat(); updUndo(); setTimeout(fitPlan,50);
 }
 function loadProjectSilent(j){ const p=Object.assign(newProject(),j); p.axes=(j.axes||[]).map(a=>{ const n=Object.assign(newAxe(),a); n.saisie=Object.assign(newAxe().saisie,a.saisie||{}); n.saisie.el=Object.assign({E:'',N:'',az:'',rows:[]},n.saisie.el||{}); n.saisie.pi=Object.assign({rows:[]},n.saisie.pi||{}); n.profil=Object.assign({nom:'',piv:[]},a.profil||{}); n.equations=a.equations||[]; return n; }); if(!p.axes.length) p.axes=[newAxe()]; p.historique=j.historique||[]; ST.prj=p; }
 
