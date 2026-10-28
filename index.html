@@ -140,8 +140,9 @@ table.ed input.num.s{width:82px}
     <img class="an-logo" id="anLogo" alt="Arpent-Nord construction" width="57" height="46"><img class="mt-logo" id="mtLogo" alt="MECATECH Arpentage" width="78" height="46">
     <div class="brand">
       <h1>Projet routier</h1>
-      <span>Axe en plan, profil en long, rapports et exports · <span id="verApp" title="Version de l'application"></span></span>
+      <span>Axe, profil, rapports et exports · <span id="verApp" title="Version de l'application"></span><span id="mStat"></span></span>
     </div>
+    <button class="btn" id="bMandat" title="Enregistrer et ouvrir les projets directement dans le dossier du contrat : 04_PRODUCTION\04_ROUTES (Chrome ou Edge)">Mandat…</button>
     <button class="btn" id="bNew" title="Commencer un nouveau projet vide">Nouveau</button>
     <label class="btn" title="Ouvrir un projet routier enregistré (projet_NOM.json)"><input type="file" id="fOpen" accept=".json" class="sr">Ouvrir…</label>
     <label class="btn" title="LandXML (Civil 3D), route Trimble (.rxl), polyligne DXF"><input type="file" id="fImp" accept=".xml,.landxml,.rxl,.dxf" multiple class="sr">Importer…</label>
@@ -192,7 +193,8 @@ document.getElementById('anLogo').src=AN_LOGO;document.getElementById('mtLogo').
      A : arc      {t:'A',A,B,C,r,rot(+1 gauche / -1 droite),a0,da,len,s0}
      S : spirale  {t:'S',A,B,len,s0,P,h,th0,th1,k0,k1,rot}  (clothoïde, polyligne dense)
    ============================================================ */
-const APP_VER='v1.0 (2026-10-28)';
+const APP_VER='v1.1 (2026-10-28)';
+function nowLocal(sec){ const d=new Date(), z=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())} ${z(d.getHours())}:${z(d.getMinutes())}`+(sec?':'+z(d.getSeconds()):''); }
 const D2R=Math.PI/180;
 const nrm=a=>{ a%=2*Math.PI; if(a<=-Math.PI)a+=2*Math.PI; if(a>Math.PI)a-=2*Math.PI; return a; };
 function fmtPM(s){ if(s==null||!isFinite(s)) return '—'; const neg=s<0; s=Math.abs(s)+5e-7; const km=Math.floor(s/1000); const m=s-km*1000; return (neg?'-':'')+km+'+'+m.toFixed(3).padStart(7,'0'); }
@@ -601,7 +603,7 @@ function reverseEls(els){
 function xmlEsc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function landXML(prj,list){
   const ne=p=>`${p[1].toFixed(6)} ${p[0].toFixed(6)}`, dg=th=>{ let d=th/D2R; d=((d%360)+360)%360; return d.toFixed(10); };
-  const now=new Date(), date=now.toISOString().slice(0,10), time=now.toTimeString().slice(0,8);
+  const nl=nowLocal(true), date=nl.slice(0,10), time=nl.slice(11);
   let x=`<?xml version="1.0" encoding="UTF-8"?>\n<LandXML xmlns="http://www.landxml.org/schema/LandXML-1.2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.landxml.org/schema/LandXML-1.2 http://www.landxml.org/schema/LandXML-1.2/LandXML-1.2.xsd" date="${date}" time="${time}" version="1.2" language="French" readOnly="false">\n`;
   x+=`\t<Units>\n\t\t<Metric areaUnit="squareMeter" linearUnit="meter" volumeUnit="cubicMeter" temperatureUnit="celsius" pressureUnit="milliBars" diameterUnit="millimeter" angularUnit="decimal degrees" directionUnit="decimal degrees"></Metric>\n\t</Units>\n`;
   if(prj.systeme) x+=`\t<CoordinateSystem desc="${xmlEsc(prj.systeme)}"></CoordinateSystem>\n`;
@@ -722,6 +724,7 @@ async function saveAny(filename,data){
   try{ blobDownload(filename,data); return 'ok'; }catch(_){ return 'fail'; }
 }
 function readFile(f){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=()=>rej(r.error); r.readAsText(f); }); }
+const projBase=()=>ST.prj.mandat?ST.prj.mandat.dossier:projName();
 const projName=()=>(ST.prj.nom||'PROJET').toUpperCase().replace(/[^A-Z0-9_-]+/g,'_').replace(/^_+|_+$/g,'')||'PROJET';
 const axName=ax=>String(ax.nom||'AXE').toUpperCase().replace(/[^A-Z0-9_-]+/g,'_').replace(/^_+|_+$/g,'')||'AXE';
 const verTag=()=>'v'+(ST.prj.version||0);
@@ -757,6 +760,7 @@ function paneProj(){
     <label>Système de coordonnées<select data-p="systeme">${SYSTEMES.map(s=>`<option ${s===p.systeme?'selected':''}>${esc(s)}</option>`).join('')}${sysIn?'':`<option selected>${esc(p.systeme)}</option>`}</select></label>
     <label>Préparé par<input type="text" data-p="par" value="${esc(p.par)}" placeholder="Initiales"></label>
   </div>
+  <p class="help">${p.mandat?`Lié au contrat <b>${esc(p.mandat.contrat)}</b> : <span class="mono">04_PRODUCTION\\04_ROUTES\\${esc(p.mandat.dossier)}</span>${M.pdir?'':' (à reconnecter à l\'enregistrement)'}.`:'Non lié à un contrat : « Enregistrer » télécharge le fichier.'} <button class="btn small" data-act="mandat">Mandat…</button></p>
   <p class="help">Version enregistrée : <b>${verTag()}</b>${p.date?' du '+esc(p.date):''}${ST.dirty?' · <span style="color:var(--warn)">modifications non enregistrées</span>':''}. Le logo des rapports suit le contrat (MA → MECATECH, sinon Arpent-Nord).</p></div>
   <div class="sect"><h4>Axes <span class="sp"></span><button class="btn small" data-act="axnew">+ Nouvel axe</button></h4>
   <div id="res"></div></div>
@@ -903,7 +907,7 @@ function paneSort(){
     <div class="row"><button class="btn primary small" data-act="stakedl">Télécharger le CSV</button></div><div id="res"></div></div>
   <div class="sect"><h4>LandXML (Civil 3D, Trimble)</h4><p class="help">Axe en plan, équations et profil, en convention Civil 3D (points Nord Est). À valider par une relecture dans Civil 3D.</p>
     <div class="row"><button class="btn small" data-act="lxdl">Axe courant</button>${ST.prj.axes.length>1?'<button class="btn small" data-act="lxall">Tous les axes</button>':''}</div></div>
-  <div class="sect"><h4>Projet</h4><div class="row"><button class="btn small" data-act="save">Enregistrer projet_${esc(projName())}.json</button></div></div>`;
+  <div class="sect"><h4>Projet</h4><div class="row"><button class="btn small" data-act="save">Enregistrer projet_${esc(projBase())}.json</button></div></div>`;
 }
 function stakeRows(){
   const ax=curAx(), g=geoOf(ax), o=ST.stake; if(!g.els.length) return [];
@@ -1009,14 +1013,15 @@ $('#pane').addEventListener('click',async e=>{
     case 'calc1': calcTool(1); return; case 'calc2': calcTool(2); return; case 'calc3': calcTool(3); return; case 'calc4': calcTool(4); return;
     case 'rep': { const g=geoOf(ax); if(!g.els.length){ toast('Aucun axe calculé'); return; } const html=reportHTML(); openModal('Rapport d\'éléments','<iframe id="repFrame" title="Rapport"></iframe>',[{label:'Imprimer / PDF',primary:true,fn:()=>$('#repFrame').contentWindow.print()},{label:'Télécharger (.html)',fn:()=>dlReport()}]); $('#repFrame').srcdoc=html; return; }
     case 'repdl': dlReport(); return;
-    case 'stakedl': { const L=stakeRows(); if(!L.length){ toast('Aucun axe calculé'); return; } exportNote(); const r=await saveAny(`${projName()}_${verTag()}_${axName(ax)}_piquetage.csv`,stakeCSV()); if(r==='ok') toast(L.length+' points exportés'); return; }
-    case 'lxdl': case 'lxall': { const list=(a==='lxall'?ST.prj.axes:[ax]).map(x=>({ax:x,geo:geoOf(x)})).filter(o=>o.geo.els.length); if(!list.length){ toast('Aucun axe calculé'); return; } exportNote(); const r=await saveAny(`${projName()}_${verTag()}_${a==='lxall'?'axes':axName(ax)}.xml`,landXML(ST.prj,list)); if(r==='ok') toast('LandXML exporté'); return; }
+    case 'stakedl': { const L=stakeRows(); if(!L.length){ toast('Aucun axe calculé'); return; } exportNote(); const r=await outFile(`${projBase()}_${verTag()}_${axName(ax)}_piquetage.csv`,stakeCSV()); if(r==='ok') toast(L.length+' points exportés'); return; }
+    case 'lxdl': case 'lxall': { const list=(a==='lxall'?ST.prj.axes:[ax]).map(x=>({ax:x,geo:geoOf(x)})).filter(o=>o.geo.els.length); if(!list.length){ toast('Aucun axe calculé'); return; } exportNote(); const r=await outFile(`${projBase()}_${verTag()}_${a==='lxall'?'axes':axName(ax)}.xml`,landXML(ST.prj,list)); if(r==='ok') toast('LandXML exporté'); return; }
     case 'save': saveProject(); return;
+    case 'mandat': openMandat(); return;
   }
 });
 function focusLast(sel){ const L=document.querySelectorAll(sel); if(L.length) L[L.length-1].focus(); }
 function selTab(){ document.querySelectorAll('.tab').forEach(x=>x.setAttribute('aria-selected',x.dataset.t===ST.tab?'true':'false')); renderPane(); }
-async function dlReport(){ const ax=curAx(); if(!geoOf(ax).els.length){ toast('Aucun axe calculé'); return; } exportNote(); await saveAny(`${projName()}_${verTag()}_${axName(ax)}_rapport-elements.html`,reportHTML()); }
+async function dlReport(){ const ax=curAx(); if(!geoOf(ax).els.length){ toast('Aucun axe calculé'); return; } exportNote(); await outFile(`${projBase()}_${verTag()}_${axName(ax)}_rapport-elements.html`,reportHTML()); }
 function convertTo(m){
   const ax=curAx(), g=geoOf(ax); if(!g.els.length){ ax.saisie.mode=m; touch(); renderPane(); return; }
   if(m==='elements'){ const r=toElementRows(g.els); ax.saisie.el={E:r.E,N:r.N,az:r.az,rows:r.rows}; ax.saisie.mode='elements'; const nt=r.rows.filter(x=>x.warnNT).length; if(nt) toast(nt+' arc(s) ou spirale(s) non tangent(s) : la saisie par éléments les rend tangents',4000); }
@@ -1034,12 +1039,22 @@ function pasteDlg(title,help,fn){
 /* ============================================================
    FICHIERS : ouvrir, enregistrer, importer
    ============================================================ */
-function saveProject(){
-  const p=ST.prj; p.version=(p.version||0)+1; p.date=new Date().toISOString().slice(0,16).replace('T',' ');
+async function saveProject(){
+  const p=ST.prj; const base=projBase(); const name=`projet_${base}.json`;
+  const linked=p.mandat?await mEnsure():null;
+  if(p.mandat&&!linked&&!confirm('Le dossier du contrat n\'est pas accessible (Mandat… pour le reconnecter). Télécharger le projet à la place ?')) return;
+  let exV=0;
+  if(linked){ const ex=await readJSON(M.pdir,name); if(ex){ exV=ex.version||0; if(exV>(p.version||0)&&!confirm(`Une version plus récente est déjà enregistrée dans le dossier du contrat : v${exV}${ex.date?' du '+ex.date:''}${ex.par?' par '+ex.par:''}.\n\nVous travaillez sur la v${p.version||0}. Écraser avec votre version ?\n(Annuler, puis Mandat… → Ouvrir, pour reprendre la sienne.)`)) return; } }
+  const old={version:p.version,date:p.date,n:p.historique.length};
+  p.version=Math.max(p.version||0,exV)+1; p.date=nowLocal();
   const nAx=p.axes.length, nP=p.axes.filter(a=>(a.profil.piv||[]).length).length;
-  p.historique.push({version:p.version,date:p.date,par:p.par||'',note:`${nAx} axe(s), ${nP} profil(s)`});
+  p.historique.push({version:p.version,date:p.date,par:p.par||'',note:`${nAx} axe(s), ${nP} profil(s)`+(linked?'':' · téléchargé')});
   const data=JSON.stringify(p,clean,1);
-  saveAny(`projet_${projName()}.json`,data).then(r=>{ if(r==='ok'){ ST.dirty=false; autosave(); toast('Projet enregistré : version '+verTag()); if(ST.tab==='proj') renderPane(); } else { p.version--; p.historique.pop(); toast('Enregistrement annulé'); } });
+  let r='fail';
+  if(linked){ try{ await writeFile(M.pdir,name,data); r='ok'; toast('Projet enregistré : '+mPath(name)+' · v'+p.version,4500); }catch(e){ toast('Écriture impossible : '+e.message,4500); } }
+  else { r=await saveAny(name,data); if(r==='ok') toast('Projet téléchargé : '+name+' · v'+p.version); }
+  if(r==='ok'){ ST.dirty=false; autosave(); if(ST.tab==='proj') renderPane(); }
+  else { p.version=old.version; p.date=old.date; p.historique.length=old.n; if(r!=='fail') toast('Enregistrement annulé'); }
 }
 function loadProject(j,name){
   if(!j||j.format!=='projet-routier') throw new Error('ce n\'est pas un projet routier');
@@ -1047,13 +1062,13 @@ function loadProject(j,name){
   const p=Object.assign(newProject(),j); p.axes=(j.axes||[]).map(a=>{ const n=Object.assign(newAxe(),a); n.saisie=Object.assign(newAxe().saisie,a.saisie||{}); if(!a.saisie) n.saisie.mode='import'; n.saisie.el=Object.assign({E:'',N:'',az:'',rows:[]},n.saisie.el||{}); n.saisie.pi=Object.assign({rows:[]},n.saisie.pi||{}); n.profil=Object.assign({nom:'',piv:[]},a.profil||{}); n.equations=a.equations||[]; return n; });
   if(!p.axes.length) p.axes=[newAxe()];
   p.historique=j.historique||[];
-  ST.prj=p; ST.cur=0; ST.dirty=false; ST.prof={x0:null,x1:null}; autosave(); ST.tab='axe'; selTab(); fitPlan();
+  ST.prj=p; ST.cur=0; ST.dirty=false; ST.prof={x0:null,x1:null}; M.cdir=M.pdir=null; renderMStat(); autosave(); ST.tab='axe'; selTab(); fitPlan();
   toast(`Projet ${name||''} ouvert (version v${p.version||0})`);
 }
 $('#fOpen').addEventListener('change',async e=>{ const f=e.target.files[0]; e.target.value=''; if(!f) return; try{ loadProject(JSON.parse(await readFile(f)),f.name); }catch(err){ toast('Fichier illisible : '+err.message,4000); } });
 $('#fImp').addEventListener('change',async e=>{ const fs=[...e.target.files]; e.target.value=''; for(const f of fs) await importFile(f); });
 $('#bSave').onclick=saveProject;
-$('#bNew').onclick=()=>{ if(ST.dirty&&!confirm('Le projet courant a des modifications non enregistrées. Commencer un nouveau projet ?')) return; ST.prj=newProject(); ST.cur=0; ST.dirty=false; autosave(); ST.tab='proj'; selTab(); fitPlan(); };
+$('#bNew').onclick=()=>{ if(ST.dirty&&!confirm('Le projet courant a des modifications non enregistrées. Commencer un nouveau projet ?')) return; ST.prj=newProject(); ST.cur=0; ST.dirty=false; M.cdir=M.pdir=null; renderMStat(); autosave(); ST.tab='proj'; selTab(); fitPlan(); };
 function isBlank(ax){ return !ax.elements.length && !(ax.profil.piv||[]).length && !ax.saisie.el.rows.length; }
 function addAxes(list,source,sys){
   const W=[]; let first=null;
@@ -1066,23 +1081,23 @@ function addAxes(list,source,sys){
   ST.cur=first; ST.prof={x0:null,x1:null}; touch(true); ST.tab='axe'; selTab(); fitPlan();
   return W;
 }
-async function importFile(f){
+async function importFile(f,fromSrc){
   let text; try{ text=await readFile(f); }catch(_){ toast('Lecture impossible : '+f.name); return; }
   const ext=(f.name.split('.').pop()||'').toLowerCase();
   try{
     if(ext==='json'){ loadProject(JSON.parse(text),f.name); return; }
-    if(ext==='dxf'){ dxfDialog(text,f.name); return; }
+    if(ext==='dxf'){ if(dxfDialog(text,f.name)&&!fromSrc) await copySource(f); return; }
     const isRxl=ext==='rxl'||/<TrimbleRoad[\s>]/.test(text.slice(0,2000));
     const r=isRxl?parseRXL(text,f.name):parseLandXML(text,f.name);
-    const W=addAxes(r.axes,f.name,r.sys);
+    const W=addAxes(r.axes,f.name,r.sys); if(!fromSrc) await copySource(f);
     const all=[...r.warn,...W];
     const msg=`${r.axes.length} axe(s) importé(s) de ${f.name}`+(r.axes.some(a=>a.piv)?' avec profil':'');
     if(all.length) openModal('Import : '+f.name,`<p>${esc(msg)}.</p>${warnHTML(all.map(m=>({lvl:'warn',msg:m})))}`); else toast(msg);
   }catch(err){ toast(f.name+' : '+err.message,4500); }
 }
 function dxfDialog(text,name){
-  let P; try{ P=parseDXFPolylines(text); }catch(err){ toast('DXF illisible'); return; }
-  if(!P.length){ toast('Aucune polyligne dans ce DXF'); return; }
+  let P; try{ P=parseDXFPolylines(text); }catch(err){ toast('DXF illisible'); return false; }
+  if(!P.length){ toast('Aucune polyligne dans ce DXF'); return false; }
   P.sort((a,b)=>b.len-a.len);
   openModal('Choisir la polyligne de l\'axe — '+name,`<p class="help">Les droites et les arcs (bulges) sont repris. Les spirales ne peuvent pas être déduites d'un DXF. Le sens du chaînage suit le sens de la polyligne.</p>
    <div class="fields"><label>Nom de l'axe<input type="text" id="dxNom" value="Axe DXF"></label><label>PM de départ<input type="text" class="num" id="dxPM" value="0+000.000"></label></div>
@@ -1091,6 +1106,7 @@ function dxfDialog(text,name){
    [{label:'Importer',primary:true,fn:()=>{ const p=P[+document.querySelector('input[name=dxp]:checked').value]; let els=p.els; if($('#dxRev').checked) els=reverseEls(els); else restation(els); const pm=parsePM($('#dxPM').value); closeModal();
       const W=addAxes([{nom:$('#dxNom').value||'Axe DXF',pmDepart:isFinite(pm)?pm:0,els,eq:[],piv:null}],name+' (calque '+(p.layer||'0')+')','');
       const g=geoOf(curAx()); const nt=g.W.filter(w=>/Non tangent/.test(w.msg)).length; toast('Axe importé du DXF'+(nt?` · ${nt} jonction(s) non tangente(s)`:''),3500); }}]);
+  return true;
 }
 /* glisser-déposer */
 let dragN=0;
@@ -1224,11 +1240,142 @@ new ResizeObserver(()=>drawAll()).observe($('#vProf'));
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change',drawAll);
 
 /* ---------- démarrage ---------- */
-(function init(){
+function initApp(){
   let ok=false; try{ const s=JSON.parse(localStorage.getItem(LSKEY)||'null'); if(s&&s.prj&&s.prj.format==='projet-routier'){ loadProjectSilent(s.prj); ST.cur=Math.min(s.cur||0,ST.prj.axes.length-1); ST.dirty=!!s.dirty; ok=true; } }catch(_){}
   if(!ok) ST.prj=newProject();
-  renderPane(); setTimeout(fitPlan,50);
-})();
+  renderPane(); renderMStat(); setTimeout(fitPlan,50);
+}
 function loadProjectSilent(j){ const p=Object.assign(newProject(),j); p.axes=(j.axes||[]).map(a=>{ const n=Object.assign(newAxe(),a); n.saisie=Object.assign(newAxe().saisie,a.saisie||{}); n.saisie.el=Object.assign({E:'',N:'',az:'',rows:[]},n.saisie.el||{}); n.saisie.pi=Object.assign({rows:[]},n.saisie.pi||{}); n.profil=Object.assign({nom:'',piv:[]},a.profil||{}); n.equations=a.equations||[]; return n; }); if(!p.axes.length) p.axes=[newAxe()]; p.historique=j.historique||[]; ST.prj=p; }
+
+/* ============================================================
+   MANDAT : lecture et écriture directes dans le dossier du contrat (OneDrive / SharePoint)
+   Même accès que la Gestion des levés et le Contrôle d'implantation (01_ACTIFS ou 99_EN RODAGE),
+   mémorisé dans ce navigateur. Chrome ou Edge sur ordinateur.
+   <contrat>\04_PRODUCTION\04_ROUTES\<PROJET>\
+       projet_<PROJET>.json   (versionné)
+       01_SOURCES\            (fichiers reçus, jamais modifiés)
+       02_EXPORTS\            (exports versionnés, jamais écrasés)
+   ============================================================ */
+const RE_CONTRAT=/^(AN-\d{2}-\d{3}|MA-\d{2}-\d{3,4})(?=$|[_ ])/i;
+const ROUTES_PATH=['04_PRODUCTION','04_ROUTES'];
+const M={root:null, cdir:null, pdir:null, scan:null};
+const anIdb={
+  open(){ return new Promise((ok,ko)=>{ const r=indexedDB.open('an-gestion-leves',1); r.onupgradeneeded=()=>r.result.createObjectStore('h'); r.onsuccess=()=>ok(r.result); r.onerror=()=>ko(r.error); }); },
+  async get(k){ try{ const db=await this.open(); return await new Promise(ok=>{ const r=db.transaction('h').objectStore('h').get(k); r.onsuccess=()=>ok(r.result); r.onerror=()=>ok(null); }); }catch(_){ return null; } },
+  async set(k,v){ try{ const db=await this.open(); await new Promise(ok=>{ const t=db.transaction('h','readwrite'); t.objectStore('h').put(v,k); t.oncomplete=ok; t.onerror=ok; }); }catch(_){} }
+};
+const fsOK=()=>'showDirectoryPicker' in window;
+async function subDir(d,parts,create=false){ for(const p of parts) d=await d.getDirectoryHandle(p,{create}); return d; }
+async function hasEntry(d,name){ try{ await d.getFileHandle(name); return true; }catch(_){ return false; } }
+async function hasDir(d,name){ try{ await d.getDirectoryHandle(name); return true; }catch(_){ return false; } }
+async function readJSON(d,name){ try{ return JSON.parse(await (await (await d.getFileHandle(name)).getFile()).text()); }catch(_){ return null; } }
+async function writeFile(d,name,data){ const w=await (await d.getFileHandle(name,{create:true})).createWritable(); await w.write(data); await w.close(); }
+async function uniqueName(d,name){ const i=name.lastIndexOf('.'), b=i>0?name.slice(0,i):name, x=i>0?name.slice(i):''; let n=name, k=2; while(await hasEntry(d,n)) n=b+'-'+(k++)+x; return n; }
+const ctrNo=c=>{ const m=String(c||'').match(RE_CONTRAT); return m?m[1].toUpperCase():c; };
+const lsGet=(k,d)=>{ try{ const v=localStorage.getItem(k); return v==null?d:v; }catch(_){ return d; } };
+const lsSet=(k,v)=>{ try{ localStorage.setItem(k,v); }catch(_){} };
+async function mPerm(ask){ const h=M.root; if(!h) return false; try{ if(await h.queryPermission({mode:'readwrite'})==='granted') return true; if(ask) return (await h.requestPermission({mode:'readwrite'}))==='granted'; }catch(_){} return false; }
+function mPath(...p){ const m=ST.prj.mandat; return [m&&m.contrat,...ROUTES_PATH,m&&m.dossier,...p].filter(Boolean).join('\\'); }
+function renderMStat(){ const m=ST.prj.mandat, el=$('#mStat'); if(!el) return; el.innerHTML=m?` · <b>Mandat ${esc(ctrNo(m.contrat))}</b> · 04_ROUTES\\${esc(m.dossier)}${M.pdir?'':' <span style="color:var(--warn)">(à reconnecter)</span>'}`:''; }
+/* Rétablit l'accès au dossier du projet lié (demande l'autorisation au besoin) */
+async function mEnsure(){
+  const m=ST.prj.mandat; if(!m) return null; if(M.pdir) return true; if(!fsOK()) return false;
+  if(!M.root) M.root=await anIdb.get('root'); if(!M.root) return false;
+  if(!(await mPerm(true))) return false;
+  try{ M.cdir=await M.root.getDirectoryHandle(m.contrat); M.pdir=await subDir(M.cdir,[...ROUTES_PATH,m.dossier]); renderMStat(); return true; }catch(_){ return false; }
+}
+/* Écrit un export dans 02_EXPORTS (jamais écrasé) ; sinon téléchargement */
+async function outFile(filename,data){
+  if(ST.prj.mandat){
+    const ok=await mEnsure();
+    if(ok){ try{ const d=await subDir(M.pdir,['02_EXPORTS'],true); const n=await uniqueName(d,filename); await writeFile(d,n,data); toast('Enregistré : '+mPath('02_EXPORTS',n),4500); return 'ok'; }catch(e){ toast('Écriture impossible dans le dossier du contrat : '+e.message,4500); } }
+    else if(!confirm('Le dossier du contrat n\'est pas accessible (Mandat… pour le reconnecter). Télécharger le fichier à la place ?')) return 'declined';
+  }
+  return saveAny(filename,data);
+}
+/* Copie un fichier importé dans 01_SOURCES (s'il n'y est pas déjà) */
+async function copySource(f){
+  if(!ST.prj.mandat||!M.pdir) return;
+  try{ const d=await subDir(M.pdir,['01_SOURCES'],true); if(await hasEntry(d,f.name)) return; await writeFile(d,f.name,f); toast('Copié dans '+mPath('01_SOURCES',f.name),3500); }catch(_){}
+}
+async function mScan(contrat){
+  const cdir=await M.root.getDirectoryHandle(contrat);
+  const prod=await hasDir(cdir,'04_PRODUCTION'); let routesOk=false; const projets=[];
+  try{ const r=await subDir(cdir,ROUTES_PATH); routesOk=true;
+    for await(const [n,h] of r.entries()){ if(h.kind!=='directory'||n.startsWith('.')||n.startsWith('~')) continue;
+      let file=null, j=null; for await(const [fn,fh] of h.entries()) if(fh.kind==='file'&&/^projet_.*\.json$/i.test(fn)){ file=fn; break; }
+      if(file) j=await readJSON(h,file);
+      const src=[]; try{ const s=await h.getDirectoryHandle('01_SOURCES'); for await(const [sn,sh] of s.entries()) if(sh.kind==='file'&&/\.(xml|landxml|rxl|dxf)$/i.test(sn)) src.push({name:sn,h:sh}); }catch(_){}
+      projets.push({name:n,h,file,j,src}); } }catch(_){}
+  projets.sort((a,b)=>a.name.localeCompare(b.name,'fr',{numeric:true}));
+  return {contrat,cdir,prod,routesOk,projets};
+}
+async function openMandat(){ M.scan=null; openModal('Mandat — dossier du contrat','<div id="mmBody"><p class="help">Lecture…</p></div>'); if(!M.root&&fsOK()) M.root=await anIdb.get('root'); await renderMandat(); }
+$('#bMandat').onclick=openMandat;
+async function renderMandat(){
+  const el=$('#mmBody'); if(!el) return;
+  if(!fsOK()){ el.innerHTML=`<p class="help">L'accès direct aux dossiers des contrats exige <b>Chrome ou Edge sur ordinateur</b>. Utilisez « Enregistrer » et « Importer… » (téléchargements) à la place.</p>`; return; }
+  let h=`<div class="sect"><h4>1. Dossier des contrats</h4>`;
+  if(!M.root){ h+=`<p class="help">Choisissez le dossier <b>…\\General\\01_CONTRATS\\01_ACTIFS</b> synchronisé par OneDrive (ou <b>99_EN RODAGE</b> pour un contrat pas encore actif). C'est le même que dans la Gestion des levés et le Contrôle d'implantation.</p><div class="row"><button class="btn primary" data-mm="pick">Choisir le dossier…</button></div></div>`; el.innerHTML=h; bindMandat(); return; }
+  const ok=await mPerm(false);
+  h+=`<p class="help">Dossier : <b class="mono">${esc(M.root.name)}</b> <button class="btn small" data-mm="pick">Changer…</button></p>`;
+  if(!ok){ h+=`<p class="help">Le navigateur doit confirmer l'accès à ce dossier.</p><div class="row"><button class="btn primary" data-mm="perm">Autoriser l'accès</button></div></div>`; el.innerHTML=h; bindMandat(); return; }
+  let cs=[]; try{ for await(const [n,x] of M.root.entries()) if(x.kind==='directory'&&RE_CONTRAT.test(n)) cs.push(n); cs.sort((a,b)=>a.localeCompare(b,'fr',{numeric:true})); }catch(e){ el.innerHTML=h+`<p class="help">Lecture impossible : ${esc(e.message)}</p></div>`; bindMandat(); return; }
+  const m=ST.prj.mandat; let cur=(M.scan&&M.scan.contrat)||(m&&m.contrat)||'';
+  if(!cur){ const want=String(ST.prj.contrat||'').toUpperCase(); cur=cs.find(c=>ctrNo(c)===want)||lsGet('an-pr-contrat',''); }
+  if(!cs.includes(cur)) cur='';
+  h+=`</div><div class="sect"><h4>2. Contrat</h4><select id="mmCtr"><option value="">— choisir —</option>${cs.map(c=>`<option ${c===cur?'selected':''}>${esc(c)}</option>`).join('')}</select>${cs.length?'':'<p class="help">Aucun dossier de contrat (AN-AA-XXX, MA-AA-XXX) dans ce dossier.</p>'}`;
+  if(m&&!cs.includes(m.contrat)) h+=warnHTML([{lvl:'warn',msg:`Le projet est lié au contrat ${m.contrat}, introuvable dans ${M.root.name} (contrat déplacé vers 01_ACTIFS ?). Changez de dossier ou liez-le de nouveau.`}]);
+  h+=`</div>`;
+  if(cur){
+    if(!M.scan||M.scan.contrat!==cur){ el.innerHTML=h+'<p class="help">Lecture du contrat…</p>'; bindMandat(); try{ M.scan=await mScan(cur); }catch(e){ el.innerHTML=h+`<p class="help">Lecture impossible : ${esc(e.message)}</p>`; bindMandat(); return; } }
+    const sc=M.scan;
+    h+=`<div class="sect"><h4>3. Projets routiers du contrat</h4>`;
+    if(!sc.routesOk) h+=`<p class="help">Le dossier <b class="mono">04_PRODUCTION\\04_ROUTES</b> n'existe pas encore dans ce contrat.</p>`;
+    else if(!sc.projets.length) h+=`<p class="help">Aucun projet dans <b class="mono">04_PRODUCTION\\04_ROUTES</b>.</p>`;
+    else h+=`<div class="tablewrap"><table><thead><tr><th>Projet</th><th>Version</th><th>Enregistré</th><th>Sources</th><th></th></tr></thead><tbody>${sc.projets.map((p,i)=>`<tr><td class="mono">${esc(p.name)}</td><td class="mono">${p.j?'v'+(p.j.version||0):'—'}</td><td>${p.j?esc((p.j.date||'')+(p.j.par?' · '+p.j.par:'')):(p.file?'illisible':'aucun projet')}</td><td>${p.src.length?p.src.map((s,k)=>`<button class="btn small" data-mm="src" data-i="${i}" data-k="${k}" title="Importer ce fichier dans le projet courant">${esc(s.name)}</button>`).join(' '):'—'}</td><td>${p.j?`<button class="btn small primary" data-mm="open" data-i="${i}">Ouvrir</button>`:''}</td></tr>`).join('')}</tbody></table></div>`;
+    h+=`</div>`;
+    const nm=projName(), ex=sc.projets.find(p=>p.name.toUpperCase()===nm), linked=m&&m.contrat===cur;
+    h+=`<div class="sect"><h4>4. Lier le projet courant</h4>`;
+    if(!sc.prod) h+=warnHTML([{lvl:'err',msg:'Ce contrat n\'a pas de dossier 04_PRODUCTION : vérifiez qu\'il suit NDA-001.'}]);
+    else if(!ST.prj.nom) h+=`<p class="help">Donnez d'abord un nom au projet (onglet Projet), par exemple PISTE_CYCLABLE.</p>`;
+    else{
+      h+=`<p class="help">Le projet sera enregistré dans <b class="mono">${esc(cur)}\\04_PRODUCTION\\04_ROUTES\\${esc(nm)}\\projet_${esc(nm)}.json</b>, les exports dans <b class="mono">02_EXPORTS</b> et les fichiers importés copiés dans <b class="mono">01_SOURCES</b>.</p>`;
+      if(ex&&ex.j&&!linked) h+=warnHTML([{lvl:'warn',msg:`Un projet ${nm} existe déjà dans ce contrat (v${ex.j.version||0}). Ouvrez-le plutôt (section 3), ou renommez le projet courant.`}]);
+      if(linked&&m.dossier===nm) h+=warnHTML([{lvl:'ok',msg:'Le projet courant est déjà lié à ce dossier.'}]);
+      const pc=String(ST.prj.contrat||'').toUpperCase(); if(pc&&pc!==ctrNo(cur)) h+=warnHTML([{lvl:'warn',msg:`Le n° de contrat du projet (${pc}) diffère de ${ctrNo(cur)} ; il sera remplacé.`}]);
+      const done=linked&&m.dossier===nm;
+      h+=`<div class="row">${done?'':`<button class="btn primary" data-mm="link" ${ex&&ex.j&&!linked?'disabled':''}>${ex?'Lier et enregistrer':'Créer le dossier, lier et enregistrer'}</button>`}${m?'<button class="btn" data-mm="unlink">Délier</button>':''}</div>`;
+    }
+    h+=`</div>`;
+  }
+  el.innerHTML=h; bindMandat();
+}
+function bindMandat(){
+  const el=$('#mmBody'); if(!el) return;
+  const s=$('#mmCtr'); if(s) s.onchange=async()=>{ lsSet('an-pr-contrat',s.value); await renderMandatFor(s.value); };
+  el.querySelectorAll('[data-mm]').forEach(b=>b.onclick=()=>mandatAction(b.dataset.mm,+b.dataset.i,+b.dataset.k));
+}
+async function renderMandatFor(c){ if(!c){ M.scan=null; await renderMandat(); return; } try{ M.scan=await mScan(c); }catch(e){ toast('Lecture impossible : '+e.message); M.scan=null; } await renderMandat(); }
+async function mandatAction(a,i,k){
+  const sc=M.scan;
+  if(a==='pick'){ try{ const h=await window.showDirectoryPicker({id:'an-actifs',mode:'readwrite'}); await anIdb.set('root',h); M.root=h; M.scan=null; M.cdir=M.pdir=null; renderMStat(); await renderMandat(); }catch(e){ if(e.name!=='AbortError') toast('Impossible d\'ouvrir le dossier : '+e.message); } return; }
+  if(a==='perm'){ await mPerm(true); await renderMandat(); return; }
+  if(a==='open'){ const p=sc.projets[i]; if(ST.dirty&&!confirm('Le projet courant a des modifications non enregistrées. Ouvrir '+p.name+' quand même ?')) return;
+    try{ const j=await readJSON(p.h,p.file); loadProject(j,p.file); ST.prj.mandat={contrat:sc.contrat,dossier:p.name}; M.cdir=sc.cdir; M.pdir=p.h; ST.dirty=false; autosave(); renderMStat(); closeModal(); toast(`${p.name} v${ST.prj.version} ouvert depuis ${ctrNo(sc.contrat)}`); }catch(e){ toast('Lecture impossible : '+e.message+' (fichier OneDrive non téléchargé ?)',4500); } return; }
+  if(a==='src'){ const p=sc.projets[i], s=p.src[k]; try{ const f=await s.h.getFile(); closeModal(); await importFile(f,true); }catch(e){ toast('Lecture impossible : '+e.message,4500); } return; }
+  if(a==='unlink'){ if(!confirm('Délier le projet du dossier du contrat ? Les fichiers déjà enregistrés restent en place ; les prochains enregistrements seront des téléchargements.')) return; delete ST.prj.mandat; M.cdir=M.pdir=null; ST.dirty=true; autosave(); renderMStat(); await renderMandat(); return; }
+  if(a==='link'){
+    const nm=projName(); const ex=sc.projets.find(p=>p.name.toUpperCase()===nm);
+    if(!ex&&!confirm(`Créer le dossier suivant ?\n\n${sc.contrat}\\04_PRODUCTION\\04_ROUTES\\${nm}\n   01_SOURCES\n   02_EXPORTS`)) return;
+    try{
+      if(!(await mPerm(true))) throw new Error('accès refusé');
+      const pdir=await subDir(sc.cdir,[...ROUTES_PATH,ex?ex.name:nm],true); await subDir(pdir,['01_SOURCES'],true); await subDir(pdir,['02_EXPORTS'],true);
+      ST.prj.mandat={contrat:sc.contrat,dossier:ex?ex.name:nm}; ST.prj.contrat=ctrNo(sc.contrat); M.cdir=sc.cdir; M.pdir=pdir; M.scan=null; renderMStat(); closeModal();
+      await saveProject(); if(ST.tab==='proj') renderPane();
+    }catch(e){ toast('Création impossible : '+e.message,4500); }
+    return; }
+}
+initApp();
 </script>
 </body></html>
